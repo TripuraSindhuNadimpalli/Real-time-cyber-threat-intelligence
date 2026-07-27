@@ -1,3 +1,4 @@
+from detection.threat_detector import ThreatDetector
 import json
 
 from confluent_kafka import Consumer, KafkaError
@@ -20,6 +21,7 @@ def create_consumer():
 
 
 def consume_events():
+    detector = ThreatDetector(failed_login_threshold=3)
     """Read and display security events from Kafka."""
     consumer = create_consumer()
     consumer.subscribe([KAFKA_TOPIC])
@@ -54,6 +56,15 @@ def consume_events():
                 f"user={event.get('username')} | "
                 f"source_ip={event.get('source_ip')}"
             )
+            alerts = detector.analyze(event)
+
+            for alert in alerts:
+                print("\n🚨 SECURITY ALERT")
+                print(f"Type: {alert['alert_type']}")
+                print(f"Severity: {alert['severity']}")
+                print(f"User: {alert['username']}")
+                print(f"Source IP: {alert['source_ip']}")
+                print(f"Message: {alert['message']}\n")
 
     except KeyboardInterrupt:
         print("\nConsumer stopped by the user.")
