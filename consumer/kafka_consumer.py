@@ -1,3 +1,4 @@
+from database.postgres_client import PostgresClient
 from detection.threat_detector import ThreatDetector
 import json
 
@@ -21,7 +22,10 @@ def create_consumer():
 
 
 def consume_events():
-    detector = ThreatDetector(failed_login_threshold=3)
+    detector = ThreatDetector()
+
+    db = PostgresClient()
+    db.connect()
     """Read and display security events from Kafka."""
     consumer = create_consumer()
     consumer.subscribe([KAFKA_TOPIC])
@@ -59,12 +63,10 @@ def consume_events():
             alerts = detector.analyze(event)
 
             for alert in alerts:
-                print("\n🚨 SECURITY ALERT")
-                print(f"Type: {alert['alert_type']}")
-                print(f"Severity: {alert['severity']}")
-                print(f"User: {alert['username']}")
-                print(f"Source IP: {alert['source_ip']}")
-                print(f"Message: {alert['message']}\n")
+               print("\n🚨 SECURITY ALERT")
+               print(alert)
+
+               db.save_alert(alert)
 
     except KeyboardInterrupt:
         print("\nConsumer stopped by the user.")
@@ -72,6 +74,7 @@ def consume_events():
     finally:
         consumer.close()
         print("Kafka consumer closed safely.")
+        db.close()
 
 
 if __name__ == "__main__":
