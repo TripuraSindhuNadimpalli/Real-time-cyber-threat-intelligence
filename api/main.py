@@ -1,9 +1,17 @@
 import logging
+import time
 from datetime import datetime
 from typing import Any
+from cache.redis_client import RedisClient
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+from monitoring.metrics import (
+    API_REQUEST_DURATION_SECONDS,
+    API_REQUESTS_TOTAL,
+)
 
 import psycopg2
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from psycopg2.extensions import connection
 from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel, ConfigDict
@@ -14,6 +22,8 @@ from config.settings import settings
 
 setup_logging()
 logger = logging.getLogger(__name__)
+redis_client = RedisClient()
+STATS_CACHE_KEY = "api:stats"
 
 
 # -----------------------------
@@ -58,7 +68,42 @@ app = FastAPI(
     description="REST API for detected cybersecurity alerts.",
     version="1.0.0",
 )
+@app.middleware("http")
+async def record_api_metrics(
+    request: Request,
+    call_next,
+) -> Response:
+    """Record request count and duration for every API request."""
+    start_time = time.perf_counter()
+    status_code = 500
 
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+
+    finally:
+        route = request.scope.get("route")
+
+        if route is not None:
+            endpoint = route.path
+        else:
+            endpoint = request.url.path
+
+        # Avoid counting Prometheus scraping itself.
+        if endpoint != "/metrics":
+            duration = time.perf_counter() - start_time
+
+            API_REQUESTS_TOTAL.labels(
+                method=request.method,
+                endpoint=endpoint,
+                status_code=str(status_code),
+            ).inc()
+
+            API_REQUEST_DURATION_SECONDS.labels(
+                method=request.method,
+                endpoint=endpoint,
+            ).observe(duration)
 
 def get_connection() -> connection:
     """Create and return a PostgreSQL connection for the API."""
@@ -114,6 +159,14 @@ def health_check() -> dict[str, str]:
 
     finally:
         database_connection.close()
+
+@app.get("/metrics", include_in_schema=False)
+def prometheus_metrics() -> Response:
+    """Expose application metrics in Prometheus format."""
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST,
+    )
 
 
 @app.get("/alerts", response_model=list[AlertResponse])
@@ -390,7 +443,21 @@ def get_alert_by_id(alert_id: int) -> dict[str, Any]:
 
 @app.get("/stats", response_model=AlertStatisticsResponse)
 def get_alert_statistics() -> dict[str, Any]:
-    """Return alert counts grouped by severity."""
+    """Return alert counts grouped by severity, using Redis cache."""
+
+    try:
+        cached_statistics = redis_client.get(STATS_CACHE_KEY)
+
+        if cached_statistics is not None:
+            logger.info("Returning alert statistics from Redis cache.")
+            return cached_statistics
+
+    except Exception as error:
+        logger.warning(
+            "Redis unavailable while reading stats cache | error=%s",
+            error,
+        )
+
     database_connection = get_connection()
 
     try:
@@ -416,6 +483,14 @@ def get_alert_statistics() -> dict[str, Any]:
             )
 
             statistics = cursor.fetchone()
+
+        try:
+            redis_client.set(STATS_CACHE_KEY, statistics)
+        except Exception as error:
+            logger.warning(
+                "Redis unavailable while caching stats | error=%s",
+                error,
+            )
 
         return statistics
 
