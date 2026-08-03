@@ -1,39 +1,46 @@
-from database.postgres_client import PostgresClient
-from detection.threat_detector import ThreatDetector
 import json
+import logging
 
 from confluent_kafka import Consumer, KafkaError
 
+from config.logging_config import setup_logging
+from config.settings import settings
+from database.postgres_client import PostgresClient
+from detection.threat_detector import ThreatDetector
 
-KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
-KAFKA_TOPIC = "security-events"
-CONSUMER_GROUP = "security-event-consumer-group"
+
+setup_logging()
+logger = logging.getLogger(__name__)
 
 
-def create_consumer():
+def create_consumer() -> Consumer:
     """Create and return a configured Kafka consumer."""
-    config = {
-        "bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS,
-        "group.id": CONSUMER_GROUP,
+    consumer_config = {
+        "bootstrap.servers": settings.kafka_bootstrap_servers,
+        "group.id": settings.kafka_consumer_group,
         "auto.offset.reset": "earliest",
+        "enable.auto.commit": False,
     }
 
-    return Consumer(config)
+    return Consumer(consumer_config)
 
 
-def consume_events():
+def consume_events() -> None:
+    """Read events from Kafka, detect threats, and save alerts."""
     detector = ThreatDetector()
-
-    db = PostgresClient()
-    db.connect()
-    """Read and display security events from Kafka."""
+    database = PostgresClient()
     consumer = create_consumer()
-    consumer.subscribe([KAFKA_TOPIC])
-
-    print(f"Listening for events on topic: {KAFKA_TOPIC}")
-    print("Press Control + C to stop.\n")
 
     try:
+        database.connect()
+        consumer.subscribe([settings.kafka_topic])
+
+        logger.info(
+            "Listening for events on topic: %s",
+            settings.kafka_topic,
+        )
+        logger.info("Press Control + C to stop.")
+
         while True:
             message = consumer.poll(timeout=1.0)
 
@@ -44,37 +51,74 @@ def consume_events():
                 if message.error().code() == KafkaError._PARTITION_EOF:
                     continue
 
-                print(f"Kafka consumer error: {message.error()}")
+                logger.error(
+                    "Kafka consumer error: %s",
+                    message.error(),
+                )
                 continue
 
             try:
-                event = json.loads(message.value().decode("utf-8"))
-            except json.JSONDecodeError as error:
-                print(f"Invalid JSON message: {error}")
+                event = json.loads(
+                    message.value().decode("utf-8")
+                )
+            except (json.JSONDecodeError, UnicodeDecodeError) as error:
+                logger.warning(
+                    "Invalid message at offset=%s: %s",
+                    message.offset(),
+                    error,
+                )
+
+                consumer.commit(
+                    message=message,
+                    asynchronous=False,
+                )
                 continue
 
-            print(
-                f"Received offset={message.offset()} | "
-                f"type={event.get('event_type')} | "
-                f"severity={event.get('severity')} | "
-                f"user={event.get('username')} | "
-                f"source_ip={event.get('source_ip')}"
-            )
-            alerts = detector.analyze(event)
+            try:
+                logger.info(
+                    "Received offset=%s | type=%s | severity=%s | "
+                    "user=%s | source_ip=%s",
+                    message.offset(),
+                    event.get("event_type"),
+                    event.get("severity"),
+                    event.get("username"),
+                    event.get("source_ip"),
+                )
 
-            for alert in alerts:
-               print("\n🚨 SECURITY ALERT")
-               print(alert)
+                alerts = detector.analyze(event)
 
-               db.save_alert(alert)
+                for alert in alerts:
+                    logger.warning(
+                        "SECURITY ALERT | type=%s | severity=%s | "
+                        "user=%s | source_ip=%s | message=%s",
+                        alert.get("alert_type"),
+                        alert.get("severity"),
+                        alert.get("username"),
+                        alert.get("source_ip"),
+                        alert.get("message"),
+                    )
+
+                    database.save_alert(alert)
+
+                consumer.commit(
+                    message=message,
+                    asynchronous=False,
+                )
+
+            except Exception:
+                logger.exception(
+                    "Failed to process message at offset=%s. "
+                    "Offset was not committed.",
+                    message.offset(),
+                )
 
     except KeyboardInterrupt:
-        print("\nConsumer stopped by the user.")
+        logger.info("Consumer stopped by the user.")
 
     finally:
         consumer.close()
-        print("Kafka consumer closed safely.")
-        db.close()
+        logger.info("Kafka consumer closed safely.")
+        database.close()
 
 
 if __name__ == "__main__":
