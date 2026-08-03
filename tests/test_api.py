@@ -216,3 +216,138 @@ def test_get_alert_statistics(
 
     assert response.status_code == 200
     assert response.json() == statistics
+@patch("api.main.get_connection")
+def test_get_alerts_with_pagination(
+    mock_get_connection: MagicMock,
+) -> None:
+    connection = make_database_connection(fetchall_result=[])
+    mock_get_connection.return_value = connection
+
+    response = client.get("/alerts?limit=20&offset=40")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+    cursor = (
+        connection.cursor.return_value
+        .__enter__.return_value
+    )
+
+    executed_query, parameters = cursor.execute.call_args.args
+
+    assert "LIMIT %s" in executed_query
+    assert "OFFSET %s" in executed_query
+    assert parameters == (20, 40)
+
+
+@patch("api.main.get_connection")
+def test_get_alerts_filters_by_severity(
+    mock_get_connection: MagicMock,
+) -> None:
+    connection = make_database_connection(fetchall_result=[])
+    mock_get_connection.return_value = connection
+
+    response = client.get("/alerts?severity=critical")
+
+    assert response.status_code == 200
+
+    cursor = (
+        connection.cursor.return_value
+        .__enter__.return_value
+    )
+
+    executed_query, parameters = cursor.execute.call_args.args
+
+    assert "severity = %s" in executed_query
+    assert parameters == ("critical", 100, 0)
+
+
+def test_get_alerts_rejects_invalid_severity_filter() -> None:
+    response = client.get("/alerts?severity=extreme")
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": "Severity must be low, medium, high, or critical."
+    }
+
+
+@patch("api.main.get_connection")
+def test_get_alerts_filters_by_username(
+    mock_get_connection: MagicMock,
+) -> None:
+    connection = make_database_connection(fetchall_result=[])
+    mock_get_connection.return_value = connection
+
+    response = client.get("/alerts?username=emma")
+
+    assert response.status_code == 200
+
+    cursor = (
+        connection.cursor.return_value
+        .__enter__.return_value
+    )
+
+    executed_query, parameters = cursor.execute.call_args.args
+
+    assert "username = %s" in executed_query
+    assert parameters == ("emma", 100, 0)
+
+
+@patch("api.main.get_connection")
+def test_get_alerts_filters_by_source_ip(
+    mock_get_connection: MagicMock,
+) -> None:
+    connection = make_database_connection(fetchall_result=[])
+    mock_get_connection.return_value = connection
+
+    response = client.get("/alerts?source_ip=203.0.113.82")
+
+    assert response.status_code == 200
+
+    cursor = (
+        connection.cursor.return_value
+        .__enter__.return_value
+    )
+
+    executed_query, parameters = cursor.execute.call_args.args
+
+    assert "source_ip = %s" in executed_query
+    assert parameters == ("203.0.113.82", 100, 0)
+
+
+@patch("api.main.get_connection")
+def test_get_alerts_combines_filters(
+    mock_get_connection: MagicMock,
+) -> None:
+    connection = make_database_connection(fetchall_result=[])
+    mock_get_connection.return_value = connection
+
+    response = client.get(
+        "/alerts"
+        "?severity=critical"
+        "&username=emma"
+        "&source_ip=203.0.113.82"
+        "&limit=10"
+        "&offset=5"
+    )
+
+    assert response.status_code == 200
+
+    cursor = (
+        connection.cursor.return_value
+        .__enter__.return_value
+    )
+
+    executed_query, parameters = cursor.execute.call_args.args
+
+    assert "severity = %s" in executed_query
+    assert "username = %s" in executed_query
+    assert "source_ip = %s" in executed_query
+
+    assert parameters == (
+        "critical",
+        "emma",
+        "203.0.113.82",
+        10,
+        5,
+    )
