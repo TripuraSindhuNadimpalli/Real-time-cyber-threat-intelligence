@@ -60,20 +60,23 @@ Swagger UI           Prometheus
                     Grafana Dashboard
 
 
+
+Grafana Dashboard
+
 ## Technology Stack
 
-| Category | Technology |
-|---|---|
-| Programming Language | Python 3.12 |
-| API Framework | FastAPI |
-| Event Streaming | Apache Kafka |
-| Database | PostgreSQL |
-| Cache | Redis |
-| Monitoring | Prometheus |
-| Visualization | Grafana |
-| Testing | Pytest |
-| CI/CD | GitHub Actions |
-| Containers | Docker, Docker Compose |
+| Category   | Technology     |
+| ---------- | -------------- |
+| Language   | Python 3.12    |
+| Framework  | FastAPI        |
+| Streaming  | Apache Kafka   |
+| Database   | PostgreSQL     |
+| Cache      | Redis          |
+| Monitoring | Prometheus     |
+| Dashboard  | Grafana        |
+| Testing    | Pytest         |
+| CI/CD      | GitHub Actions |
+| Containers | Docker Compose |
 
 ## Project Structure
 
