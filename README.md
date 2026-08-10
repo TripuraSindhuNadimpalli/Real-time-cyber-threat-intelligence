@@ -27,76 +27,87 @@ The project is designed to demonstrate event-driven architecture, backend engine
 - Docker Compose service orchestration
 
 ## System Architecture
-
 ```text
+
 Security Events
-      |
-      v
-Kafka Producer
-      |
-      v
-Apache Kafka
-      |
-      v
-Kafka Consumer
-      |
-      v
-Threat Detector
-      |
-      +-------------------+
-      |                   |
-      v                   v
-PostgreSQL            Redis Cache
-      |
-      v
-FastAPI REST API
-      |
-      +-------------------+
-      |                   |
-      v                   v
-Swagger UI           Prometheus
-                          |
-                          v
-                    Grafana Dashboard
+        │
+        ▼
+ Kafka Producer
+        │
+        ▼
+  Apache Kafka
+        │
+        ▼
+ Kafka Consumer
+        │
+        ▼
+ Threat Detection
+   ┌────┴────┐
+   ▼         ▼
+PostgreSQL  Redis
+      │
+      ▼
+ FastAPI REST API
+   ┌────┴─────┐
+   ▼          ▼
+Swagger   Prometheus
+               │
+               ▼
+          Grafana Dashboard
 
 
+          
 
 Grafana Dashboard
 
 ## Technology Stack
 
-| Category   | Technology     |
-| ---------- | -------------- |
-| Language   | Python 3.12    |
-| Framework  | FastAPI        |
-| Streaming  | Apache Kafka   |
-| Database   | PostgreSQL     |
-| Cache      | Redis          |
-| Monitoring | Prometheus     |
-| Dashboard  | Grafana        |
-| Testing    | Pytest         |
-| CI/CD      | GitHub Actions |
-| Containers | Docker Compose |
+**Programming Language:** Python 3.12
+
+**Backend Framework:** FastAPI
+
+**Event Streaming:** Apache Kafka
+
+**Database:** PostgreSQL
+
+**Caching:** Redis
+
+**API Documentation:** Swagger UI (OpenAPI)
+
+**Monitoring:** Prometheus
+
+**Visualization:** Grafana
+
+**Testing:** Pytest
+
+**Continuous Integration:** GitHub Actions
+
+**Containerization:** Docker Compose
 
 ## Project Structure
 
 ```text
 real-time-cyber-threat-intelligence/
-├── api/
-├── cache/
-├── config/
-├── consumer/
-├── data/
-├── database/
-├── detection/
-├── docs/
-├── monitoring/
-├── producer/
-├── tests/
-├── .github/workflows/
-├── docker-compose.yml
-├── requirements.txt
-└── README.md
+│
+├── api/                  # FastAPI REST API endpoints
+├── cache/                # Redis caching layer
+├── config/               # Application configuration
+├── consumer/             # Kafka consumer service
+├── data/                 # Sample security events
+├── database/             # PostgreSQL database logic
+├── detection/            # Threat detection engine
+├── docs/                 # Project documentation
+├── monitoring/           # Prometheus metrics
+├── producer/             # Kafka producer service
+├── tests/                # Unit and integration tests
+│
+├── .github/
+│   └── workflows/        # GitHub Actions CI/CD pipeline
+│
+├── docker-compose.yml    # Multi-container application setup
+├── requirements.txt      # Python dependencies
+├── README.md             # Project documentation
+└── .env.example          # Environment variables template
 ```
 
 ## Installation & Setup
