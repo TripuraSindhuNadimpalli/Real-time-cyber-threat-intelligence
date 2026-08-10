@@ -88,7 +88,6 @@ Grafana Dashboard
 
 ## Project Structure
 
-```text
 real-time-cyber-threat-intelligence/
 │
 ├── api/                  # FastAPI REST API endpoints
